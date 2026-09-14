@@ -9,10 +9,24 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8080/realms/demo-realm
+  datasource:
+    url: jdbc:h2:mem:demodb;DB_CLOSE_DELAY=-1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
 
 app:
   cors:
     allowed-origins: http://localhost:5173
+
+openfga:
+  api-url: http://localhost:8082
+  store-name: demo-store
 
 logging:
   level:

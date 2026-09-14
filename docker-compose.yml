@@ -19,5 +19,15 @@ services:
       retries: 15
       start_period: 30s
 
+  openfga:
+    image: openfga/openfga:v1.20.0
+    container_name: demo-openfga
+    command: run
+    ports:
+      - "8082:8080" # HTTP API (8080 is taken by Keycloak on the host)
+      - "3000:3000" # Playground UI
+    # No healthcheck: this image has no shell/curl/wget to exec into (distroless-style).
+    # The backend's OpenFGA bootstrap retries with backoff instead of waiting on Docker.
+
 volumes:
   keycloak-data:

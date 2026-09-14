@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
 import { Alert, Badge, Button, Card, Code, Group, Stack, Text } from '@mantine/core';
 import { fetchPrivateMe, fetchPublicHello } from '../api/client';
@@ -49,6 +50,9 @@ export function SessionCard() {
             Call public endpoint
           </Button>
           <Button onClick={callPrivateApi}>Call protected endpoint</Button>
+          <Button component={Link} to="/documents" variant="light" color="grape">
+            Manage documents
+          </Button>
           <Button variant="outline" color="red" onClick={() => auth.signoutRedirect()}>
             Logout
           </Button>
