@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useAuth } from 'react-oidc-context';
 import { Alert, Badge, Button, Card, Code, Group, Stack, Text } from '@mantine/core';
+import { useAuth } from '../auth/AuthProvider';
 import { fetchPrivateMe, fetchPublicHello } from '../api/client';
 
 export function SessionCard() {
-  const auth = useAuth();
+  const { keycloak } = useAuth();
   const [apiResult, setApiResult] = useState<unknown>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -19,9 +19,8 @@ export function SessionCard() {
 
   async function callPrivateApi() {
     setApiError(null);
-    if (!auth.user?.access_token) return;
     try {
-      setApiResult(await fetchPrivateMe(auth.user.access_token));
+      setApiResult(await fetchPrivateMe());
     } catch {
       setApiError('Failed to call protected endpoint (token may be invalid or expired).');
     }
@@ -31,16 +30,16 @@ export function SessionCard() {
     <Card withBorder padding="lg">
       <Stack gap="sm">
         <Group justify="space-between">
-          <Text fw={600}>{auth.user?.profile.preferred_username}</Text>
+          <Text fw={600}>{keycloak.tokenParsed?.preferred_username}</Text>
           <Badge color="green">signed in</Badge>
         </Group>
         <Text size="sm" c="dimmed">
-          {auth.user?.profile.email}
+          {keycloak.tokenParsed?.email}
         </Text>
         <Text size="xs" c="dimmed">
           Access token expires at:{' '}
-          {auth.user?.expires_at
-            ? new Date(auth.user.expires_at * 1000).toLocaleTimeString()
+          {keycloak.tokenParsed?.exp
+            ? new Date(keycloak.tokenParsed.exp * 1000).toLocaleTimeString()
             : 'unknown'}
         </Text>
 
@@ -49,7 +48,11 @@ export function SessionCard() {
             Call public endpoint
           </Button>
           <Button onClick={callPrivateApi}>Call protected endpoint</Button>
-          <Button variant="outline" color="red" onClick={() => auth.signoutRedirect()}>
+          <Button
+            variant="outline"
+            color="red"
+            onClick={() => keycloak.logout({ redirectUri: window.location.origin })}
+          >
             Logout
           </Button>
         </Group>

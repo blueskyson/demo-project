@@ -1,14 +1,14 @@
-import { useAuth } from 'react-oidc-context';
 import { Button, Card, Stack, Text } from '@mantine/core';
+import { useAuth } from '../auth/AuthProvider';
 
 export function LoginCard() {
-  const auth = useAuth();
+  const { keycloak } = useAuth();
 
   return (
     <Card withBorder padding="lg">
       <Stack gap="sm">
         <Text>You are not signed in.</Text>
-        <Button onClick={() => auth.signinRedirect()}>Login</Button>
+        <Button onClick={() => keycloak.login()}>Login</Button>
       </Stack>
     </Card>
   );

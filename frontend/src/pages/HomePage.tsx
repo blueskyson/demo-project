@@ -1,12 +1,12 @@
-import { useAuth } from 'react-oidc-context';
 import { Alert, Container, Loader, Stack, Title } from '@mantine/core';
+import { useAuth } from '../auth/AuthProvider';
 import { LoginCard } from '../components/LoginCard';
 import { SessionCard } from '../components/SessionCard';
 
 export function HomePage() {
-  const auth = useAuth();
+  const { initialized, authenticated, error } = useAuth();
 
-  if (auth.isLoading) {
+  if (!initialized) {
     return (
       <Container size="sm" py="xl">
         <Loader />
@@ -14,11 +14,11 @@ export function HomePage() {
     );
   }
 
-  if (auth.error) {
+  if (error) {
     return (
       <Container size="sm" py="xl">
         <Alert color="red" title="Authentication error">
-          {auth.error.message}
+          {error}
         </Alert>
       </Container>
     );
@@ -28,7 +28,7 @@ export function HomePage() {
     <Container size="sm" py="xl">
       <Stack gap="lg">
         <Title order={2}>Keycloak OIDC Demo</Title>
-        {auth.isAuthenticated ? <SessionCard /> : <LoginCard />}
+        {authenticated ? <SessionCard /> : <LoginCard />}
       </Stack>
     </Container>
   );

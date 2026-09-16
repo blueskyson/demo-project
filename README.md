@@ -60,19 +60,36 @@ URL) lives in [frontend/.env](frontend/.env).
 
 ## Auth flow
 
-- **Login**: `auth.signinRedirect()` (`react-oidc-context`) starts the
-  standard Authorization Code + PKCE flow — the SPA is a public client, so
-  PKCE (not a client secret) protects the code exchange. Keycloak redirects
-  back to `/callback`, which completes the token exchange and routes home.
-- **Calling the API**: the SPA attaches the OIDC access token as
-  `Authorization: Bearer <token>` on requests to the backend.
-- **Refresh**: `automaticSilentRenew: true` — when the access token is close
-  to expiry, `oidc-client-ts` transparently uses the refresh token (issued
-  alongside the access token on login) to get a new one via the standard
-  `grant_type=refresh_token` request, no iframe/redirect needed.
-- **Logout**: `auth.signoutRedirect()` performs RP-Initiated Logout — it hits
-  Keycloak's `end_session_endpoint` with the ID token, ending the Keycloak SSO
-  session, then redirects back to the SPA.
+The SPA uses Keycloak's own JS adapter, [`keycloak-js`](https://www.npmjs.com/package/keycloak-js),
+directly (typed — it ships its own `.d.ts`) rather than a generic OIDC client. There's no
+`react-keycloak` wrapper either: [`src/auth/keycloak.ts`](frontend/src/auth/keycloak.ts)
+holds a single module-level `Keycloak` instance (it may only be `init()`-ed once per page
+load), and [`src/auth/AuthProvider.tsx`](frontend/src/auth/AuthProvider.tsx) is a small
+custom React context that mirrors its state (`initialized`, `authenticated`) reactively —
+plain properties on the `Keycloak` instance don't trigger re-renders on their own.
+
+- **Login**: `keycloak.login()` starts the standard Authorization Code + PKCE flow
+  (`pkceMethod: 'S256'` in `init()`) — the SPA is a public client, so PKCE, not a client
+  secret, protects the code exchange. There's no dedicated `/callback` route: unlike
+  `oidc-client-ts`, keycloak-js's `init()` itself detects and completes the code exchange
+  on whichever page the browser lands back on (here, `/`, since no `redirectUri` is set),
+  then strips the query params.
+- **Silent SSO check on load**: `onLoad: 'check-sso'` + `silentCheckSsoRedirectUri`
+  quietly checks for an existing Keycloak session in a hidden iframe on first load (via
+  [public/silent-check-sso.html](frontend/public/silent-check-sso.html), the standard
+  keycloak-js pattern) — so a page refresh doesn't force a full-page redirect just to find
+  out you're already logged in.
+- **Calling the API**: an axios request interceptor
+  ([src/api/client.ts](frontend/src/api/client.ts)) reads `keycloak.token` and attaches
+  it as `Authorization: Bearer <token>` on every request to the backend.
+- **Refresh**: keycloak-js has no automatic renewal of its own — the standard pattern is
+  wiring `keycloak.onTokenExpired` to call `keycloak.updateToken(minValidity)`, which this
+  app does in `AuthProvider`. The API client also calls `updateToken(30)` before every
+  request as a belt-and-suspenders check. Both go through the standard
+  `grant_type=refresh_token` request against Keycloak's token endpoint.
+- **Logout**: `keycloak.logout({ redirectUri })` performs RP-Initiated Logout — it hits
+  Keycloak's `end_session_endpoint`, ending the Keycloak SSO session, then redirects back
+  to the SPA.
 
 ## Notes
 
