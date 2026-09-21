@@ -7,6 +7,9 @@ import java.util.UUID;
 
 import com.example.demobackend.authorization.AuthorizationService;
 import com.example.demobackend.authorization.FgaCheck;
+import com.example.demobackend.authorization.FgaObjectType;
+import com.example.demobackend.authorization.FgaRelation;
+import com.example.demobackend.authorization.NoFgaCheck;
 import com.example.demobackend.document.dto.CreateDocumentRequest;
 import com.example.demobackend.document.dto.DocumentResponse;
 import com.example.demobackend.document.dto.ShareDocumentRequest;
@@ -17,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DocumentService {
 
-    private static final String DOCUMENT_TYPE = "document";
-    private static final Set<String> SHAREABLE_RELATIONS = Set.of("viewer", "editor");
+    private static final FgaObjectType DOCUMENT_TYPE = FgaObjectType.DOCUMENT;
+    private static final Set<FgaRelation> SHAREABLE_RELATIONS = Set.of(FgaRelation.VIEWER, FgaRelation.EDITOR);
 
     private final DocumentRepository documentRepository;
     private final AuthorizationService authorizationService;
@@ -28,13 +31,12 @@ public class DocumentService {
         this.authorizationService = authorizationService;
     }
 
+    @NoFgaCheck(reason = "document doesn't exist yet; creator becomes owner via writeTuple, not a check")
     @Transactional
     public DocumentResponse createDocument(String userId, CreateDocumentRequest request) {
         Document document = documentRepository.save(
                 new Document(request.title(), request.content(), userId));
-        // The creator becomes the owner. This is a plain write, not a check — there's
-        // nothing to authorize yet since the object didn't exist a moment ago.
-        authorizationService.writeTuple(userId, "owner", DOCUMENT_TYPE, document.getId().toString());
+        authorizationService.writeTuple(userId, FgaRelation.OWNER, DOCUMENT_TYPE, document.getId().toString());
         return DocumentResponse.from(document);
     }
 
@@ -43,8 +45,9 @@ public class DocumentService {
      * check, it's a query shaped by OpenFGA's ListObjects — there's no annotation that
      * expresses "filter this collection to what the caller can see".
      */
+    @NoFgaCheck(reason = "filters via listObjectIds, not a single-object check")
     public List<DocumentResponse> listVisibleDocuments(String userId) {
-        List<UUID> visibleIds = authorizationService.listObjectIds(userId, "viewer", DOCUMENT_TYPE)
+        List<UUID> visibleIds = authorizationService.listObjectIds(userId, FgaRelation.VIEWER, DOCUMENT_TYPE)
                 .stream()
                 .map(UUID::fromString)
                 .toList();
@@ -53,12 +56,13 @@ public class DocumentService {
                 .toList();
     }
 
+    @NoFgaCheck(reason = "enforced in DocumentController#get")
     public DocumentResponse getDocument(UUID id) {
         return DocumentResponse.from(findOrThrow(id));
     }
 
     /** Only the owner may update — not just any editor — so this checks {@code owner}, not {@code editor}. */
-    @FgaCheck(objectType = "document", relation = "owner", idParam = "id")
+    @FgaCheck(objectType = FgaObjectType.DOCUMENT, relation = FgaRelation.OWNER, idParam = "id")
     @Transactional
     public DocumentResponse updateDocument(UUID id, UpdateDocumentRequest request) {
         Document document = findOrThrow(id);
@@ -67,7 +71,7 @@ public class DocumentService {
         return DocumentResponse.from(document);
     }
 
-    @FgaCheck(objectType = "document", relation = "owner", idParam = "id")
+    @FgaCheck(objectType = FgaObjectType.DOCUMENT, relation = FgaRelation.OWNER, idParam = "id")
     @Transactional
     public void deleteDocument(UUID id) {
         if (!documentRepository.existsById(id)) {
@@ -85,7 +89,7 @@ public class DocumentService {
      * may be granted (never re-granting owner) — so that half stays as an explicit check
      * in the method body.
      */
-    @FgaCheck(objectType = "document", relation = "owner", idParam = "documentId")
+    @FgaCheck(objectType = FgaObjectType.DOCUMENT, relation = FgaRelation.OWNER, idParam = "documentId")
     @Transactional
     public void shareDocument(UUID documentId, ShareDocumentRequest request) {
         findOrThrow(documentId);

@@ -20,14 +20,14 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 public @interface FgaCheck {
 
-    /** OpenFGA subject type, e.g. "user". */
-    String userType() default "user";
+    /** OpenFGA subject type. */
+    FgaUserType userType() default FgaUserType.USER;
 
-    /** OpenFGA relation required, e.g. "viewer", "editor", "owner". */
-    String relation();
+    /** OpenFGA relation required. */
+    FgaRelation relation();
 
-    /** OpenFGA object type, e.g. "document". */
-    String objectType();
+    /** OpenFGA object type. */
+    FgaObjectType objectType();
 
     /**
      * Name of the method parameter holding the object id. Resolved against

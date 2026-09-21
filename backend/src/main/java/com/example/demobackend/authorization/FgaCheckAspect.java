@@ -31,8 +31,8 @@ public class FgaCheckAspect {
                 fgaCheck.userType(), jwt.getSubject(), fgaCheck.relation(), fgaCheck.objectType(), objectId);
 
         if (!allowed) {
-            throw new AccessDeniedException(
-                    "Missing '" + fgaCheck.relation() + "' relation on " + fgaCheck.objectType() + ":" + objectId);
+            throw new AccessDeniedException("Missing '" + fgaCheck.relation().value() + "' relation on "
+                    + fgaCheck.objectType().value() + ":" + objectId);
         }
     }
 

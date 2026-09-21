@@ -3,6 +3,7 @@ package com.example.demobackend.web;
 import java.util.List;
 import java.util.Map;
 
+import com.example.demobackend.authorization.NoFgaCheck;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,11 +12,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class HelloController {
 
+    @NoFgaCheck(reason = "public endpoint, no authentication or authorization required")
     @GetMapping("/api/public/hello")
     public Map<String, String> publicHello() {
         return Map.of("message", "Hello, this endpoint is public.");
     }
 
+    @NoFgaCheck(reason = "authenticated read of the caller's own JWT claims; no object-level check needed")
     @GetMapping("/api/private/me")
     public Map<String, Object> me(@AuthenticationPrincipal Jwt jwt) {
         Map<String, Object> realmAccess = jwt.getClaim("realm_access");
