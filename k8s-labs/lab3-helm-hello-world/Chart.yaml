@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hello-world
+description: Helm chart version of lab1 - a basic Deployment + Service
+type: application
+version: 0.1.0
+appVersion: "1.25"

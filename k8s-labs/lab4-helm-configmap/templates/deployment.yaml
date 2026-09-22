@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-configmap-demo
+  labels:
+    app: {{ .Release.Name }}-configmap-demo
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-configmap-demo
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-configmap-demo
+      annotations:
+        # forces a rollout when the ConfigMap content changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: nginx
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-configmap-demo-config
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: html
+          configMap:
+            name: {{ .Release.Name }}-configmap-demo-config
+            items:
+              - key: index.html
+                path: index.html

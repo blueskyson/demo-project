@@ -1,0 +1,8 @@
+Deployment "{{ .Release.Name }}-hello-world" installed.
+
+Check status:
+  kubectl get pods -l app={{ .Release.Name }}-hello-world
+
+Access the service:
+  kubectl port-forward svc/{{ .Release.Name }}-hello-world 8080:{{ .Values.service.port }}
+  then open http://localhost:8080

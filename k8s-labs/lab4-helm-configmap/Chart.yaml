@@ -1,0 +1,6 @@
+apiVersion: v2
+name: configmap-demo
+description: Helm chart version of lab2 - ConfigMap consumed as env vars and a mounted file
+type: application
+version: 0.1.0
+appVersion: "1.25"

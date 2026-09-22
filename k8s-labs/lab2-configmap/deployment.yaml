@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-config
+  labels:
+    app: hello-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-config
+  template:
+    metadata:
+      labels:
+        app: hello-config
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          # Usage 1: every key in the ConfigMap becomes an env var
+          envFrom:
+            - configMapRef:
+                name: hello-config
+          volumeMounts:
+            # Usage 2: a single key mounted as a file
+            - name: html
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: html
+          configMap:
+            name: hello-config
+            items:
+              - key: index.html
+                path: index.html

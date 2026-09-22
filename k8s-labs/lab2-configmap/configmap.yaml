@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-config
+data:
+  # Consumed as an environment variable (see deployment.yaml envFrom)
+  GREETING: "Hello from a ConfigMap environment variable!"
+
+  # Consumed as a mounted file, replacing nginx's default index.html
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+      <head><title>ConfigMap Demo</title></head>
+      <body>
+        <h1>This page is served from a ConfigMap</h1>
+        <p>The HTML you are looking at was mounted into the container
+           as a file from a Kubernetes ConfigMap.</p>
+      </body>
+    </html>

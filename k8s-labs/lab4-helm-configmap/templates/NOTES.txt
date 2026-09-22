@@ -1,0 +1,12 @@
+Deployment "{{ .Release.Name }}-configmap-demo" installed.
+
+Check the env var came from the ConfigMap:
+  kubectl exec deploy/{{ .Release.Name }}-configmap-demo -- printenv GREETING
+
+Access the service (serves the ConfigMap-mounted index.html):
+  kubectl port-forward svc/{{ .Release.Name }}-configmap-demo 8080:{{ .Values.service.port }}
+  then open http://localhost:8080
+
+Try changing values.yaml's config.pageMessage and running:
+  helm upgrade {{ .Release.Name }} .
+to see the rollout pick up the new ConfigMap content.

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-configmap-demo-config
+data:
+  GREETING: {{ .Values.config.greeting | quote }}
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+      <head><title>{{ .Values.config.pageTitle }}</title></head>
+      <body>
+        <h1>{{ .Values.config.pageTitle }}</h1>
+        <p>{{ .Values.config.pageMessage }}</p>
+      </body>
+    </html>
