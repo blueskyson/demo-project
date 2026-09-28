@@ -21,9 +21,34 @@ frontend/     Vite + React + TypeScript + Mantine SPA
 | `ProposalMember`  | `proposal_member` | Join entity: proposal ⟷ user many-to-many                             |
 | `ProposalFile`    | `proposal_file`   | Metadata of an uploaded file; bytes are stored under `app.storage.dir` |
 
-The schema lives in [V1__init.sql](backend/src/main/resources/db/migration/V1__init.sql);
-Hibernate runs with `ddl-auto: validate`, so schema changes go through a new
-Flyway migration.
+### Backend layout
+
+```
+com.example.esgaward
+├── controller/   REST endpoints (@RestController) — HTTP only, delegate to services
+├── service/      Business logic and transactions; AccessPolicy holds the permission rules
+├── repository/   Spring Data JPA repositories
+├── entity/       JPA entities (User, AwardEvent, Proposal, ProposalMember, ProposalFile)
+├── dto/          Request/response records exchanged with the frontend
+├── exception/    Domain exceptions + ApiExceptionHandler (maps them to HTTP status)
+└── config/       Security (Keycloak JWT), Clock
+```
+
+Requests flow `controller → service → repository`; entities never leave the
+service layer — controllers only see DTOs.
+
+### Database migrations (Flyway)
+
+The schema is managed by Flyway, which runs automatically when the backend
+starts. Migrations live in [db/migration](backend/src/main/resources/db/migration)
+(starting with [V1__init.sql](backend/src/main/resources/db/migration/V1__init.sql)),
+and applied versions are recorded in the `flyway_schema_history` table.
+
+- To change the schema, add a new file `V<next>__<description>.sql`
+  (e.g. `V2__add_proposal_status.sql`). Never edit a migration that has
+  already been applied — Flyway's checksum validation will fail on startup.
+- Hibernate runs with `ddl-auto: validate`: it never changes the schema, it
+  only fails fast if the entities and the migrated schema disagree.
 
 ## Roles and permissions
 
@@ -42,7 +67,7 @@ neither role get 403 on every `/api/**` endpoint.
 | Change a proposal's leader                      | ✅      | ❌                                                         |
 
 Role-only rules use `@PreAuthorize`; the per-resource rules all live in
-[AccessPolicy](backend/src/main/java/com/example/esgaward/security/AccessPolicy.java).
+[AccessPolicy](backend/src/main/java/com/example/esgaward/service/AccessPolicy.java).
 API responses include an `editable` flag computed by the same policy, which the
 UI uses to show or hide edit controls.
 

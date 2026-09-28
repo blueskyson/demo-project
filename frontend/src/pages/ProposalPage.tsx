@@ -13,14 +13,12 @@ import {
   Stack,
   Table,
   Text,
-  TextInput,
-  Textarea,
   Title,
 } from '@mantine/core';
 import { errorMessage, useApi } from '../api/client';
 import type { ProposalDetail, User } from '../api/types';
-import { useCurrentUser } from '../auth/CurrentUserContext';
 import { DeadlineBadge } from '../components/DeadlineBadge';
+import { ProposalFormModal } from '../components/ProposalFormModal';
 import { useAsync } from '../hooks/useAsync';
 import { formatBytes, formatDateTime, userLabel } from '../utils/format';
 
@@ -32,6 +30,7 @@ export function ProposalPage() {
     useCallback(() => api.getProposal(proposalId), [api, proposalId]),
   );
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   if (error) return <Alert color="red">{error}</Alert>;
   if (!proposal) return <Loader />;
@@ -66,9 +65,14 @@ export function ProposalPage() {
         <Group gap="xs">
           <DeadlineBadge event={proposal.awardEvent} />
           {proposal.editable && (
-            <Button size="xs" color="red" variant="light" onClick={removeProposal}>
-              Delete proposal
-            </Button>
+            <>
+              <Button size="xs" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Button size="xs" color="red" variant="light" onClick={removeProposal}>
+                Delete proposal
+              </Button>
+            </>
           )}
         </Group>
       </Group>
@@ -81,7 +85,7 @@ export function ProposalPage() {
       )}
       {actionError && <Alert color="red">{actionError}</Alert>}
 
-      <DetailsCard key={proposal.updatedAt} proposal={proposal} onSave={(body) => run(async () => setProposal(await api.updateProposal(proposal.id, body)))} />
+      <DetailsCard proposal={proposal} />
       <MembersCard
         proposal={proposal}
         onAdd={(userId) => run(async () => setProposal(await api.addMember(proposal.id, userId)))}
@@ -113,69 +117,34 @@ export function ProposalPage() {
           })
         }
       />
+
+      <ProposalFormModal
+        opened={editing}
+        onClose={() => setEditing(false)}
+        initial={proposal}
+        onSubmit={async (values) => setProposal(await api.updateProposal(proposal.id, values))}
+      />
     </Stack>
   );
 }
 
-function DetailsCard({
-  proposal,
-  onSave,
-}: {
-  proposal: ProposalDetail;
-  onSave: (body: { title: string; description: string | null; leaderId: string | null }) => Promise<void>;
-}) {
-  const api = useApi();
-  const me = useCurrentUser();
-  const isAdmin = me.role === 'ADMIN';
-  const [title, setTitle] = useState(proposal.title);
-  const [description, setDescription] = useState(proposal.description ?? '');
-  const [leaderId, setLeaderId] = useState(proposal.leader.id);
-  const [saving, setSaving] = useState(false);
-  const users = useAsync(
-    useCallback(() => (isAdmin ? api.listUsers() : Promise.resolve([] as User[])), [api, isAdmin]),
-  );
-  const readOnly = !proposal.editable;
-
-  async function save() {
-    setSaving(true);
-    await onSave({ title, description: description || null, leaderId: isAdmin ? leaderId : null });
-    setSaving(false);
-  }
-
+function DetailsCard({ proposal }: { proposal: ProposalDetail }) {
   return (
     <Card withBorder>
-      <Stack>
-        <TextInput label="Title" value={title} readOnly={readOnly} onChange={(e) => setTitle(e.currentTarget.value)} />
-        <Textarea
-          label="Description"
-          autosize
-          minRows={4}
-          value={description}
-          readOnly={readOnly}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-        />
-        {isAdmin ? (
-          <Select
-            label="Leader"
-            description="Only admins can change the leader."
-            data={(users.data ?? [proposal.leader]).map((u) => ({ value: u.id, label: userLabel(u) }))}
-            value={leaderId}
-            onChange={(value) => value && setLeaderId(value)}
-            searchable
-          />
-        ) : (
-          <TextInput label="Leader" value={userLabel(proposal.leader)} readOnly />
-        )}
+      <Stack gap="xs">
+        <Text size="sm" c="dimmed">
+          Leader
+        </Text>
+        <Text>{userLabel(proposal.leader)}</Text>
+        <Text size="sm" c="dimmed">
+          Description
+        </Text>
+        <Text style={{ whiteSpace: 'pre-wrap' }} c={proposal.description ? undefined : 'dimmed'}>
+          {proposal.description ?? 'No description.'}
+        </Text>
         <Text size="xs" c="dimmed">
           Last updated {formatDateTime(proposal.updatedAt)}
         </Text>
-        {!readOnly && (
-          <Group justify="flex-end">
-            <Button onClick={save} loading={saving} disabled={!title.trim()}>
-              Save
-            </Button>
-          </Group>
-        )}
       </Stack>
     </Card>
   );
