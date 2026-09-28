@@ -180,9 +180,16 @@ docker compose up -d
     - `alice` / `alice123` — role `normal_user`
     - `bob` / `bob123` — role `normal_user`
 - PostgreSQL: `localhost:5432`, database `esg_award`, user/password `esg` / `esg`
-- OpenFGA: HTTP API on http://localhost:8090 (playground disabled). It stores
-  its data in the same Postgres, in a separate `openfga` database that
-  `openfga-db-init` / `openfga-migrate` create and migrate on `up`.
+- OpenFGA: HTTP API on http://localhost:8090. It stores its data in the same
+  Postgres, in a separate `openfga` database that `openfga-db-init` /
+  `openfga-migrate` create and migrate on `up`.
+- OpenFGA Playground: http://localhost:3000/playground — pick the `esg-award`
+  store to see the model as a graph and browse tuples. It's deprecated
+  upstream and doesn't support conditional or contextual tuples, so checks
+  involving the deadline or the admin role won't match the app; use
+  `fga query check ... --context '{"current_time":"..."}'` for those. The
+  `openfga-proxy` nginx sidecar ([openfga/playground-proxy.conf](openfga/playground-proxy.conf))
+  exists only to make the Playground reachable from the browser.
 
 Realm, client, roles, and users are defined in [keycloak/realm-export.json](keycloak/realm-export.json)
 and imported on first boot. To reset everything (Keycloak and the database):
