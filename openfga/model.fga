@@ -1,0 +1,41 @@
+model
+  schema 1.1
+
+type user
+
+# The whole application. Admins are NOT stored as tuples: the backend passes
+# "system:esg-award#admin@user:<id>" as a contextual tuple when the caller's
+# Keycloak token has the admin role, so Keycloak stays the source of truth.
+type system
+  relations
+    define admin: [user]
+    define can_create_award_event: admin
+
+type award_event
+  relations
+    define system: [system]
+    define admin: admin from system
+    # Stored as award_event:<id>#viewer@user:* — every user can see every event.
+    define viewer: [user:*]
+    # Stored as award_event:<id>#open@user:* with before_deadline{deadline}.
+    # Only satisfied while current_time (sent with each check) is before the deadline.
+    define open: [user:* with before_deadline]
+
+    define can_view: viewer or admin
+    define can_manage: admin
+    define can_create_proposal: open or admin
+
+type proposal
+  relations
+    define award_event: [award_event]
+    define leader: [user]
+    define member: [user]
+    define admin: admin from award_event
+
+    define can_view: leader or member or admin
+    # Normal users: only the leader, and only while the award event is open.
+    define can_edit: (leader and open from award_event) or admin
+
+condition before_deadline(current_time: timestamp, deadline: timestamp) {
+  current_time < deadline
+}

@@ -23,8 +23,12 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
+import org.testcontainers.openfga.OpenFGAContainer;
 
 import com.jayway.jsonpath.JsonPath;
 
@@ -32,6 +36,18 @@ import com.jayway.jsonpath.JsonPath;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class ProposalAuthorizationTests {
+
+    /** A real OpenFGA, so these tests also exercise openfga/model.fga end to end. */
+    static final OpenFGAContainer OPENFGA = new OpenFGAContainer("openfga/openfga:v1.21.0");
+
+    static {
+        OPENFGA.start();
+    }
+
+    @DynamicPropertySource
+    static void openFgaProperties(DynamicPropertyRegistry registry) {
+        registry.add("openfga.api-url", OPENFGA::getHttpEndpoint);
+    }
 
     @Autowired
     private MockMvc mvc;
@@ -145,8 +161,8 @@ class ProposalAuthorizationTests {
         mvc.perform(post("/api/proposals/" + proposalId + "/members").with(alice)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"userId\":\"" + bobId + "\"}"))
                 .andExpect(status().isForbidden());
-        mvc.perform(post("/api/proposals").with(alice).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"awardEventId\":" + eventId + ",\"title\":\"New\"}"))
+        mvc.perform(post("/api/award-events/" + eventId + "/proposals").with(alice)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"New\"}"))
                 .andExpect(status().isForbidden());
 
         mvc.perform(put("/api/proposals/" + proposalId).with(admin).contentType(MediaType.APPLICATION_JSON)
@@ -174,6 +190,14 @@ class ProposalAuthorizationTests {
     }
 
     @Test
+    void missingResourceIsNotFound() throws Exception {
+        mvc.perform(get("/api/proposals/999999").with(alice)).andExpect(status().isNotFound());
+        mvc.perform(put("/api/award-events/999999").with(admin).contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(Instant.now())))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void tokenWithoutAppRoleIsRejected() throws Exception {
         mvc.perform(get("/api/award-events").with(jwt())).andExpect(status().isForbidden());
         mvc.perform(get("/api/award-events")).andExpect(status().isUnauthorized());
@@ -188,8 +212,9 @@ class ProposalAuthorizationTests {
     }
 
     private long createProposal(RequestPostProcessor leader, long eventId) throws Exception {
-        String body = mvc.perform(post("/api/proposals").with(leader).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"awardEventId\":" + eventId + ",\"title\":\"Solar roof\",\"description\":\"d\"}"))
+        String body = mvc.perform(post("/api/award-events/" + eventId + "/proposals").with(leader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Solar roof\",\"description\":\"d\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.editable").value(true))
                 .andReturn().getResponse().getContentAsString();

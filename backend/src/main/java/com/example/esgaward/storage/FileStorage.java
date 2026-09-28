@@ -1,4 +1,4 @@
-package com.example.esgaward.service;
+package com.example.esgaward.storage;
 
 import java.io.IOException;
 import java.io.InputStream;

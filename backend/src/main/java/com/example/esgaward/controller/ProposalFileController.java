@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.esgaward.dto.FileDownload;
 import com.example.esgaward.dto.ProposalFileDto;
 import com.example.esgaward.service.ProposalFileService;
 
@@ -39,7 +40,7 @@ public class ProposalFileController {
 
     @GetMapping("/{fileId}/content")
     public ResponseEntity<Resource> download(@PathVariable Long proposalId, @PathVariable Long fileId) {
-        ProposalFileService.Download download = proposalFileService.download(proposalId, fileId);
+        FileDownload download = proposalFileService.download(proposalId, fileId);
         ProposalFileDto file = download.file();
         MediaType contentType = file.contentType() != null
                 ? MediaType.parseMediaType(file.contentType())

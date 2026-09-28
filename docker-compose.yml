@@ -36,6 +36,54 @@ services:
       timeout: 5s
       retries: 10
 
+  # Creates OpenFGA's own database in the shared Postgres (idempotent, so it also
+  # works on an existing postgres-data volume where init scripts don't rerun).
+  openfga-db-init:
+    image: postgres:17
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: esg
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        echo "SELECT 'CREATE DATABASE openfga' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'openfga')\gexec"
+        | psql -h postgres -U esg -d esg_award
+    restart: "no"
+
+  openfga-migrate:
+    image: openfga/openfga:v1.21.0
+    depends_on:
+      openfga-db-init:
+        condition: service_completed_successfully
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://esg:esg@postgres:5432/openfga?sslmode=disable
+    restart: "no"
+
+  openfga:
+    image: openfga/openfga:v1.21.0
+    container_name: esg-openfga
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://esg:esg@postgres:5432/openfga?sslmode=disable
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_FORMAT: json
+    ports:
+      # HTTP API. (Container port 8080 would clash with Keycloak on the host.)
+      - "8090:8080"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=openfga:8081"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   keycloak-data:
   postgres-data:

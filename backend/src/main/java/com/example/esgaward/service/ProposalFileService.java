@@ -6,7 +6,6 @@ import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.Instant;
 
-import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,12 +13,18 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.esgaward.dto.FileDownload;
 import com.example.esgaward.dto.ProposalFileDto;
 import com.example.esgaward.entity.Proposal;
 import com.example.esgaward.entity.ProposalFile;
 import com.example.esgaward.entity.User;
 import com.example.esgaward.exception.NotFoundException;
 import com.example.esgaward.repository.ProposalFileRepository;
+import com.example.esgaward.security.CurrentUserService;
+import com.example.esgaward.security.Permission;
+import com.example.esgaward.security.RequirePermission;
+import com.example.esgaward.security.ResourceId;
+import com.example.esgaward.storage.FileStorage;
 
 @Service
 public class ProposalFileService {
@@ -27,28 +32,26 @@ public class ProposalFileService {
     private final ProposalService proposalService;
     private final ProposalFileRepository proposalFileRepository;
     private final CurrentUserService currentUserService;
-    private final AccessPolicy accessPolicy;
     private final FileStorage fileStorage;
     private final Clock clock;
 
     public ProposalFileService(ProposalService proposalService, ProposalFileRepository proposalFileRepository,
-            CurrentUserService currentUserService, AccessPolicy accessPolicy, FileStorage fileStorage, Clock clock) {
+            CurrentUserService currentUserService, FileStorage fileStorage, Clock clock) {
         this.proposalService = proposalService;
         this.proposalFileRepository = proposalFileRepository;
         this.currentUserService = currentUserService;
-        this.accessPolicy = accessPolicy;
         this.fileStorage = fileStorage;
         this.clock = clock;
     }
 
     @Transactional
-    public ProposalFileDto upload(Long proposalId, MultipartFile upload) {
-        User user = currentUserService.currentUser();
-        Proposal proposal = proposalService.find(proposalId);
-        accessPolicy.checkEdit(user, proposal);
+    @RequirePermission(Permission.PROPOSAL_FILE_UPLOAD)
+    public ProposalFileDto upload(@ResourceId Long proposalId, MultipartFile upload) {
         if (upload.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
         }
+        User user = currentUserService.currentUser();
+        Proposal proposal = proposalService.find(proposalId);
 
         String key;
         try (InputStream content = upload.getInputStream()) {
@@ -67,19 +70,16 @@ public class ProposalFileService {
 
     /** Returns the file metadata and its content for download. */
     @Transactional
-    public Download download(Long proposalId, Long fileId) {
-        User user = currentUserService.currentUser();
-        Proposal proposal = proposalService.find(proposalId);
-        accessPolicy.checkView(user, proposal);
-        ProposalFile file = findFile(proposal, fileId);
-        return new Download(ProposalFileDto.from(file), fileStorage.load(file.getStorageKey()));
+    @RequirePermission(Permission.PROPOSAL_FILE_READ)
+    public FileDownload download(@ResourceId Long proposalId, Long fileId) {
+        ProposalFile file = findFile(proposalService.find(proposalId), fileId);
+        return new FileDownload(ProposalFileDto.from(file), fileStorage.load(file.getStorageKey()));
     }
 
     @Transactional
-    public void delete(Long proposalId, Long fileId) {
-        User user = currentUserService.currentUser();
+    @RequirePermission(Permission.PROPOSAL_FILE_DELETE)
+    public void delete(@ResourceId Long proposalId, Long fileId) {
         Proposal proposal = proposalService.find(proposalId);
-        accessPolicy.checkEdit(user, proposal);
         ProposalFile file = findFile(proposal, fileId);
 
         proposal.removeFile(file, clock.instant());
@@ -91,8 +91,5 @@ public class ProposalFileService {
                 .filter(f -> f.getId().equals(fileId))
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("File " + fileId + " not found in proposal " + proposal.getId()));
-    }
-
-    public record Download(ProposalFileDto file, Resource content) {
     }
 }

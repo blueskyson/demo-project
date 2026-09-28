@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Alert, Anchor, Button, Card, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { errorMessage, useApi } from '../api/client';
 import type { AwardEvent } from '../api/types';
-import { useCurrentUser } from '../auth/CurrentUserContext';
 import { AwardEventFormModal } from '../components/AwardEventFormModal';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { useAsync } from '../hooks/useAsync';
@@ -11,8 +10,6 @@ import { formatDateTime } from '../utils/format';
 
 export function AwardEventsPage() {
   const api = useApi();
-  const me = useCurrentUser();
-  const isAdmin = me.role === 'ADMIN';
   const { data: events, error, loading, reload } = useAsync(useCallback(() => api.listAwardEvents(), [api]));
   const [editing, setEditing] = useState<AwardEvent | 'new' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -32,7 +29,7 @@ export function AwardEventsPage() {
     <Stack>
       <Group justify="space-between">
         <Title order={3}>Award events</Title>
-        {isAdmin && <Button onClick={() => setEditing('new')}>New award event</Button>}
+        <Button onClick={() => setEditing('new')}>New award event</Button>
       </Group>
 
       {error && <Alert color="red">{error}</Alert>}
@@ -52,7 +49,7 @@ export function AwardEventsPage() {
               <Table.Th>Name</Table.Th>
               <Table.Th>Deadline</Table.Th>
               <Table.Th>Status</Table.Th>
-              {isAdmin && <Table.Th />}
+              <Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -67,18 +64,16 @@ export function AwardEventsPage() {
                 <Table.Td>
                   <DeadlineBadge event={event} />
                 </Table.Td>
-                {isAdmin && (
-                  <Table.Td>
-                    <Group gap="xs" justify="flex-end">
-                      <Button size="xs" variant="light" onClick={() => setEditing(event)}>
-                        Edit
-                      </Button>
-                      <Button size="xs" variant="light" color="red" onClick={() => remove(event)}>
-                        Delete
-                      </Button>
-                    </Group>
-                  </Table.Td>
-                )}
+                <Table.Td>
+                  <Group gap="xs" justify="flex-end">
+                    <Button size="xs" variant="light" onClick={() => setEditing(event)}>
+                      Edit
+                    </Button>
+                    <Button size="xs" variant="light" color="red" onClick={() => remove(event)}>
+                      Delete
+                    </Button>
+                  </Group>
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

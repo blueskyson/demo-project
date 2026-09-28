@@ -2,7 +2,9 @@ package com.example.esgaward.service;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -18,8 +20,15 @@ import com.example.esgaward.entity.Proposal;
 import com.example.esgaward.entity.User;
 import com.example.esgaward.exception.ConflictException;
 import com.example.esgaward.exception.NotFoundException;
+import com.example.esgaward.openfga.RelationshipTuples;
 import com.example.esgaward.repository.ProposalRepository;
 import com.example.esgaward.repository.UserRepository;
+import com.example.esgaward.security.AuthorizationService;
+import com.example.esgaward.security.CurrentUserService;
+import com.example.esgaward.security.Permission;
+import com.example.esgaward.security.RequirePermission;
+import com.example.esgaward.security.ResourceId;
+import com.example.esgaward.storage.FileStorage;
 
 @Service
 public class ProposalService {
@@ -28,84 +37,89 @@ public class ProposalService {
     private final UserRepository userRepository;
     private final AwardEventService awardEventService;
     private final CurrentUserService currentUserService;
-    private final AccessPolicy accessPolicy;
+    private final AuthorizationService authorizationService;
+    private final RelationshipTuples relationshipTuples;
     private final FileStorage fileStorage;
     private final Clock clock;
 
     public ProposalService(ProposalRepository proposalRepository, UserRepository userRepository,
-            AwardEventService awardEventService, CurrentUserService currentUserService, AccessPolicy accessPolicy,
-            FileStorage fileStorage, Clock clock) {
+            AwardEventService awardEventService, CurrentUserService currentUserService,
+            AuthorizationService authorizationService, RelationshipTuples relationshipTuples, FileStorage fileStorage,
+            Clock clock) {
         this.proposalRepository = proposalRepository;
         this.userRepository = userRepository;
         this.awardEventService = awardEventService;
         this.currentUserService = currentUserService;
-        this.accessPolicy = accessPolicy;
+        this.authorizationService = authorizationService;
+        this.relationshipTuples = relationshipTuples;
         this.fileStorage = fileStorage;
         this.clock = clock;
     }
 
-    /** Admins see every proposal; normal users see the ones they lead or are a member of. */
+    /** Admins see every proposal; normal users see the ones OpenFGA says they can view. */
     @Transactional
+    @RequirePermission(Permission.PROPOSAL_LIST)
     public List<ProposalSummaryDto> list(Long awardEventId) {
         User user = currentUserService.currentUser();
         List<Proposal> proposals = user.isAdmin()
                 ? proposalRepository.findAllByEvent(awardEventId)
-                : proposalRepository.findAllVisibleTo(user.getId(), awardEventId);
+                : findByIds(authorizationService.viewableProposalIds(user), awardEventId);
+        Predicate<Long> editable = authorizationService.proposalEditability(user);
         return proposals.stream()
-                .map(p -> ProposalSummaryDto.from(p, accessPolicy.canEdit(user, p)))
+                .map(p -> ProposalSummaryDto.from(p, editable.test(p.getId())))
                 .toList();
     }
 
     @Transactional
-    public ProposalDetailDto get(Long id) {
-        User user = currentUserService.currentUser();
-        Proposal proposal = find(id);
-        accessPolicy.checkView(user, proposal);
-        return toDetail(user, proposal);
+    @RequirePermission(Permission.PROPOSAL_READ)
+    public ProposalDetailDto get(@ResourceId Long id) {
+        return toDetail(currentUserService.currentUser(), find(id));
     }
 
     @Transactional
-    public ProposalDetailDto create(CreateProposalRequest request) {
+    @RequirePermission(Permission.PROPOSAL_CREATE)
+    public ProposalDetailDto create(@ResourceId Long awardEventId, CreateProposalRequest request) {
         User user = currentUserService.currentUser();
-        AwardEvent awardEvent = awardEventService.find(request.awardEventId());
-        accessPolicy.checkCreateProposalIn(user, awardEvent);
+        AwardEvent awardEvent = awardEventService.find(awardEventId);
         User leader = resolveLeader(user, request.leaderId(), user);
 
         Proposal proposal = proposalRepository.save(
                 new Proposal(awardEvent, leader, request.title(), request.description(), clock.instant()));
+        relationshipTuples.proposalCreated(proposal);
         return toDetail(user, proposal);
     }
 
     @Transactional
-    public ProposalDetailDto update(Long id, UpdateProposalRequest request) {
+    @RequirePermission(Permission.PROPOSAL_UPDATE)
+    public ProposalDetailDto update(@ResourceId Long id, UpdateProposalRequest request) {
         User user = currentUserService.currentUser();
         Proposal proposal = find(id);
-        accessPolicy.checkEdit(user, proposal);
-        User leader = resolveLeader(user, request.leaderId(), proposal.getLeader());
+        User oldLeader = proposal.getLeader();
+        User leader = resolveLeader(user, request.leaderId(), oldLeader);
         if (proposal.hasMember(leader.getId())) {
             throw new ConflictException("The new leader is currently a member; remove them from members first");
         }
 
         proposal.update(request.title(), request.description(), leader, clock.instant());
+        if (!leader.getId().equals(oldLeader.getId())) {
+            relationshipTuples.leaderChanged(id, oldLeader.getId(), leader.getId());
+        }
         return toDetail(user, proposal);
     }
 
     @Transactional
-    public void delete(Long id) {
-        User user = currentUserService.currentUser();
+    @RequirePermission(Permission.PROPOSAL_DELETE)
+    public void delete(@ResourceId Long id) {
         Proposal proposal = find(id);
-        accessPolicy.checkEdit(user, proposal);
-
         proposal.getFiles().forEach(file -> fileStorage.deleteAfterCommit(file.getStorageKey()));
+        relationshipTuples.proposalDeleted(proposal);
         proposalRepository.delete(proposal);
     }
 
     @Transactional
-    public ProposalDetailDto addMember(Long id, AddMemberRequest request) {
-        User user = currentUserService.currentUser();
+    @RequirePermission(Permission.PROPOSAL_MEMBER_MANAGE)
+    public ProposalDetailDto addMember(@ResourceId Long id, AddMemberRequest request) {
         Proposal proposal = find(id);
-        accessPolicy.checkEdit(user, proposal);
-
         User member = findUser(request.userId());
         if (proposal.isLedBy(member)) {
             throw new ConflictException("The leader cannot also be added as a member");
@@ -114,19 +128,23 @@ public class ProposalService {
             throw new ConflictException(member.getUsername() + " is already a member");
         }
         proposal.addMember(member, clock.instant());
-        return toDetail(user, proposal);
+        relationshipTuples.memberAdded(id, member.getId());
+        return toDetail(currentUserService.currentUser(), proposal);
     }
 
     @Transactional
-    public ProposalDetailDto removeMember(Long id, UUID memberId) {
-        User user = currentUserService.currentUser();
+    @RequirePermission(Permission.PROPOSAL_MEMBER_MANAGE)
+    public ProposalDetailDto removeMember(@ResourceId Long id, UUID memberId) {
         Proposal proposal = find(id);
-        accessPolicy.checkEdit(user, proposal);
-
         if (!proposal.removeMember(memberId, clock.instant())) {
             throw new NotFoundException("User " + memberId + " is not a member of proposal " + id);
         }
-        return toDetail(user, proposal);
+        relationshipTuples.memberRemoved(id, memberId);
+        return toDetail(currentUserService.currentUser(), proposal);
+    }
+
+    private List<Proposal> findByIds(Set<Long> ids, Long awardEventId) {
+        return ids.isEmpty() ? List.of() : proposalRepository.findAllByIdInAndEvent(ids, awardEventId);
     }
 
     Proposal find(Long id) {
@@ -134,6 +152,10 @@ public class ProposalService {
                 .orElseThrow(() -> new NotFoundException("Proposal " + id + " not found"));
     }
 
+    /**
+     * Only admins may pick a leader other than the default. This depends on the request body, so
+     * it's checked here rather than through a {@link Permission}.
+     */
     private User resolveLeader(User currentUser, UUID requestedLeaderId, User defaultLeader) {
         if (requestedLeaderId == null || requestedLeaderId.equals(defaultLeader.getId())) {
             return defaultLeader;
@@ -150,6 +172,6 @@ public class ProposalService {
     }
 
     private ProposalDetailDto toDetail(User user, Proposal proposal) {
-        return ProposalDetailDto.from(proposal, accessPolicy.canEdit(user, proposal), clock.instant());
+        return ProposalDetailDto.from(proposal, authorizationService.canEdit(user, proposal), clock.instant());
     }
 }

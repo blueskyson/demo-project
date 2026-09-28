@@ -16,7 +16,7 @@ import {
   Title,
 } from '@mantine/core';
 import { errorMessage, useApi } from '../api/client';
-import type { ProposalDetail, User } from '../api/types';
+import type { ProposalDetail } from '../api/types';
 import { DeadlineBadge } from '../components/DeadlineBadge';
 import { ProposalFormModal } from '../components/ProposalFormModal';
 import { useAsync } from '../hooks/useAsync';
@@ -42,6 +42,8 @@ export function ProposalPage() {
       await action();
     } catch (e) {
       setActionError(errorMessage(e));
+      // The error alert is at the top; make sure it's visible even when the action was further down.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       reload();
     }
   }
@@ -64,23 +66,19 @@ export function ProposalPage() {
         <Title order={3}>{proposal.title}</Title>
         <Group gap="xs">
           <DeadlineBadge event={proposal.awardEvent} />
-          {proposal.editable && (
-            <>
-              <Button size="xs" onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-              <Button size="xs" color="red" variant="light" onClick={removeProposal}>
-                Delete proposal
-              </Button>
-            </>
-          )}
+          <Button size="xs" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+          <Button size="xs" color="red" variant="light" onClick={removeProposal}>
+            Delete proposal
+          </Button>
         </Group>
       </Group>
 
       {!proposal.editable && (
         <Alert color="gray">
-          Read-only: only the proposal leader can edit it, and only until the award event deadline (
-          {formatDateTime(proposal.awardEvent.deadline)}).
+          You can't edit this proposal: only its leader can, and only until the award event deadline (
+          {formatDateTime(proposal.awardEvent.deadline)}). Changes you try will be rejected by the server.
         </Alert>
       )}
       {actionError && <Alert color="red">{actionError}</Alert>}
@@ -162,7 +160,7 @@ function MembersCard({
   const api = useApi();
   const [selected, setSelected] = useState<string | null>(null);
   const users = useAsync(
-    useCallback(() => (proposal.editable ? api.listUsers() : Promise.resolve([] as User[])), [api, proposal.editable]),
+    useCallback(() => api.listUsers(), [api]),
   );
   const taken = new Set([proposal.leader.id, ...proposal.members.map((m) => m.id)]);
   const candidates = (users.data ?? []).filter((u) => !taken.has(u.id));
@@ -179,37 +177,33 @@ function MembersCard({
         {proposal.members.map((member) => (
           <Group key={member.id} justify="space-between">
             <Text size="sm">{userLabel(member)}</Text>
-            {proposal.editable && (
-              <ActionIcon variant="subtle" color="red" aria-label="Remove member" onClick={() => onRemove(member.id)}>
-                ✕
-              </ActionIcon>
-            )}
+            <ActionIcon variant="subtle" color="red" aria-label="Remove member" onClick={() => onRemove(member.id)}>
+              ✕
+            </ActionIcon>
           </Group>
         ))}
-        {proposal.editable && (
-          <Group align="flex-end">
-            <Select
-              style={{ flex: 1 }}
-              label="Add member"
-              description="Only users who have signed in at least once are listed."
-              placeholder="Pick a user"
-              data={candidates.map((u) => ({ value: u.id, label: userLabel(u) }))}
-              value={selected}
-              onChange={setSelected}
-              searchable
-            />
-            <Button
-              disabled={!selected}
-              onClick={async () => {
-                if (!selected) return;
-                await onAdd(selected);
-                setSelected(null);
-              }}
-            >
-              Add
-            </Button>
-          </Group>
-        )}
+        <Group align="flex-end">
+          <Select
+            style={{ flex: 1 }}
+            label="Add member"
+            description="Only users who have signed in at least once are listed."
+            placeholder="Pick a user"
+            data={candidates.map((u) => ({ value: u.id, label: userLabel(u) }))}
+            value={selected}
+            onChange={setSelected}
+            searchable
+          />
+          <Button
+            disabled={!selected}
+            onClick={async () => {
+              if (!selected) return;
+              await onAdd(selected);
+              setSelected(null);
+            }}
+          >
+            Add
+          </Button>
+        </Group>
       </Stack>
     </Card>
   );
@@ -233,22 +227,20 @@ function FilesCard({
       <Stack>
         <Group justify="space-between">
           <Title order={5}>Files</Title>
-          {proposal.editable && (
-            <FileButton
-              onChange={async (file) => {
-                if (!file) return;
-                setUploading(true);
-                await onUpload(file);
-                setUploading(false);
-              }}
-            >
-              {(props) => (
-                <Button {...props} size="xs" loading={uploading}>
-                  Upload file
-                </Button>
-              )}
-            </FileButton>
-          )}
+          <FileButton
+            onChange={async (file) => {
+              if (!file) return;
+              setUploading(true);
+              await onUpload(file);
+              setUploading(false);
+            }}
+          >
+            {(props) => (
+              <Button {...props} size="xs" loading={uploading}>
+                Upload file
+              </Button>
+            )}
+          </FileButton>
         </Group>
         {proposal.files.length === 0 ? (
           <Text size="sm" c="dimmed">
@@ -280,11 +272,9 @@ function FilesCard({
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    {proposal.editable && (
-                      <Button size="xs" variant="subtle" color="red" onClick={() => onDelete(file.id)}>
-                        Delete
-                      </Button>
-                    )}
+                    <Button size="xs" variant="subtle" color="red" onClick={() => onDelete(file.id)}>
+                      Delete
+                    </Button>
                   </Table.Td>
                 </Table.Tr>
               ))}

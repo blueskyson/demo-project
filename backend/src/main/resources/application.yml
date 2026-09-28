@@ -28,6 +28,11 @@ spring:
         jwt:
           issuer-uri: http://localhost:8080/realms/esg-award
 
+openfga:
+  api-url: http://localhost:8090
+  store-name: esg-award
+  backfill-on-startup: true
+
 app:
   cors:
     allowed-origins: http://localhost:5173

@@ -38,8 +38,8 @@ export function createApi(http: AxiosInstance) {
     listProposals: (awardEventId?: number) =>
       http.get<ProposalSummary[]>('/api/proposals', { params: { awardEventId } }).then((r) => r.data),
     getProposal: (id: number) => http.get<ProposalDetail>(`/api/proposals/${id}`).then((r) => r.data),
-    createProposal: (body: CreateProposalRequest) =>
-      http.post<ProposalDetail>('/api/proposals', body).then((r) => r.data),
+    createProposal: (awardEventId: number, body: CreateProposalRequest) =>
+      http.post<ProposalDetail>(`/api/award-events/${awardEventId}/proposals`, body).then((r) => r.data),
     updateProposal: (id: number, body: UpdateProposalRequest) =>
       http.put<ProposalDetail>(`/api/proposals/${id}`, body).then((r) => r.data),
     deleteProposal: (id: number) => http.delete(`/api/proposals/${id}`),

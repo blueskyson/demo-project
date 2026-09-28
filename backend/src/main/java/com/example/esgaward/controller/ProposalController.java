@@ -25,7 +25,7 @@ import com.example.esgaward.dto.UpdateProposalRequest;
 import com.example.esgaward.service.ProposalService;
 
 @RestController
-@RequestMapping("/api/proposals")
+@RequestMapping("/api")
 public class ProposalController {
 
     private final ProposalService proposalService;
@@ -34,39 +34,40 @@ public class ProposalController {
         this.proposalService = proposalService;
     }
 
-    @GetMapping
+    @GetMapping("/proposals")
     public List<ProposalSummaryDto> list(@RequestParam(required = false) Long awardEventId) {
         return proposalService.list(awardEventId);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/proposals/{id}")
     public ProposalDetailDto get(@PathVariable Long id) {
         return proposalService.get(id);
     }
 
-    @PostMapping
+    @PostMapping("/award-events/{awardEventId}/proposals")
     @ResponseStatus(HttpStatus.CREATED)
-    public ProposalDetailDto create(@Valid @RequestBody CreateProposalRequest request) {
-        return proposalService.create(request);
+    public ProposalDetailDto create(@PathVariable Long awardEventId,
+            @Valid @RequestBody CreateProposalRequest request) {
+        return proposalService.create(awardEventId, request);
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/proposals/{id}")
     public ProposalDetailDto update(@PathVariable Long id, @Valid @RequestBody UpdateProposalRequest request) {
         return proposalService.update(id, request);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/proposals/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         proposalService.delete(id);
     }
 
-    @PostMapping("/{id}/members")
+    @PostMapping("/proposals/{id}/members")
     public ProposalDetailDto addMember(@PathVariable Long id, @Valid @RequestBody AddMemberRequest request) {
         return proposalService.addMember(id, request);
     }
 
-    @DeleteMapping("/{id}/members/{userId}")
+    @DeleteMapping("/proposals/{id}/members/{userId}")
     public ProposalDetailDto removeMember(@PathVariable Long id, @PathVariable UUID userId) {
         return proposalService.removeMember(id, userId);
     }

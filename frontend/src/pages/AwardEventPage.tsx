@@ -20,8 +20,6 @@ export function AwardEventPage() {
   if (event.error) return <Alert color="red">{event.error}</Alert>;
   if (!event.data) return <Loader />;
 
-  const canCreate = me.role === 'ADMIN' || !event.data.closed;
-
   return (
     <Stack>
       <Anchor component={Link} to="/" size="sm">
@@ -42,7 +40,7 @@ export function AwardEventPage() {
 
       <Group justify="space-between">
         <Title order={4}>{me.role === 'ADMIN' ? 'All proposals' : 'My proposals'}</Title>
-        {canCreate && <Button onClick={() => setCreating(true)}>New proposal</Button>}
+        <Button onClick={() => setCreating(true)}>New proposal</Button>
       </Group>
 
       {proposals.error && <Alert color="red">{proposals.error}</Alert>}
@@ -81,7 +79,7 @@ export function AwardEventPage() {
         opened={creating}
         onClose={() => setCreating(false)}
         onSubmit={async (values) => {
-          const created = await api.createProposal({ awardEventId: eventId, ...values });
+          const created = await api.createProposal(eventId, values);
           navigate(`/proposals/${created.id}`);
         }}
       />

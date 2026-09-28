@@ -21,6 +21,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(AuthorizationUnavailableException.class)
+    public ProblemDetail handleAuthorizationUnavailable(AuthorizationUnavailableException ex) {
+        logger.error("OpenFGA call failed", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());

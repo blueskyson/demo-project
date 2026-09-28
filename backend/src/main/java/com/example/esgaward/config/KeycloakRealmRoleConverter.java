@@ -15,7 +15,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
  * Keycloak puts realm roles under the "realm_access.roles" claim, which Spring Security's
  * default JWT converter doesn't know about (it only looks at "scope"/"scp"). This maps
  * them to standard ROLE_* authorities (upper-cased, e.g. {@code normal_user} ->
- * {@code ROLE_NORMAL_USER}) so @PreAuthorize/hasRole(...) work as expected.
+ * {@code ROLE_NORMAL_USER}) so hasRole(...) checks in SecurityConfig work.
  */
 public class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
 

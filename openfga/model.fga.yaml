@@ -1,0 +1,84 @@
+# Run with: docker run --rm -v "$PWD/openfga:/openfga" -w /openfga openfga/cli:v0.8.1 model test --tests model.fga.yaml
+name: ESG Award authorization model
+model_file: ./model.fga
+
+tuples:
+  - { user: system:esg-award, relation: system, object: award_event:open-event }
+  - { user: "user:*", relation: viewer, object: award_event:open-event }
+  - user: "user:*"
+    relation: open
+    object: award_event:open-event
+    condition: { name: before_deadline, context: { deadline: "2026-12-31T00:00:00Z" } }
+
+  - { user: system:esg-award, relation: system, object: award_event:closed-event }
+  - { user: "user:*", relation: viewer, object: award_event:closed-event }
+  - user: "user:*"
+    relation: open
+    object: award_event:closed-event
+    condition: { name: before_deadline, context: { deadline: "2026-01-01T00:00:00Z" } }
+
+  - { user: award_event:open-event, relation: award_event, object: proposal:p-open }
+  - { user: user:alice, relation: leader, object: proposal:p-open }
+  - { user: user:bob, relation: member, object: proposal:p-open }
+
+  - { user: award_event:closed-event, relation: award_event, object: proposal:p-closed }
+  - { user: user:alice, relation: leader, object: proposal:p-closed }
+
+tests:
+  - name: normal users
+    check:
+      - user: user:alice
+        object: proposal:p-open
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: true, can_edit: true }
+      - user: user:bob
+        object: proposal:p-open
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: true, can_edit: false }
+      - user: user:carol
+        object: proposal:p-open
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: false, can_edit: false }
+      - user: user:alice
+        object: proposal:p-closed
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: true, can_edit: false }
+      - user: user:alice
+        object: award_event:open-event
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: true, can_manage: false, can_create_proposal: true }
+      - user: user:alice
+        object: award_event:closed-event
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: true, can_create_proposal: false }
+      - user: user:alice
+        object: system:esg-award
+        assertions: { can_create_award_event: false }
+    list_objects:
+      - user: user:alice
+        type: proposal
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: [proposal:p-open, proposal:p-closed], can_edit: [proposal:p-open] }
+
+  - name: the open-event deadline passing
+    check:
+      - user: user:alice
+        object: proposal:p-open
+        context: { current_time: "2027-01-01T00:00:00Z" }
+        assertions: { can_edit: false }
+
+  - name: admins (contextual tuple in the app)
+    tuples:
+      - { user: user:admin, relation: admin, object: system:esg-award }
+    check:
+      - user: user:admin
+        object: proposal:p-closed
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_view: true, can_edit: true }
+      - user: user:admin
+        object: award_event:closed-event
+        context: { current_time: "2026-06-01T00:00:00Z" }
+        assertions: { can_manage: true, can_create_proposal: true }
+      - user: user:admin
+        object: system:esg-award
+        assertions: { can_create_award_event: true }

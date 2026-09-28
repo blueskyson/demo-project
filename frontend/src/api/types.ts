@@ -60,7 +60,6 @@ export interface ProposalDetail {
 }
 
 export interface CreateProposalRequest {
-  awardEventId: number;
   title: string;
   description: string | null;
   leaderId?: string | null;

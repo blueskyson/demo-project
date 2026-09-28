@@ -5,7 +5,6 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -19,7 +18,6 @@ import com.example.esgaward.entity.UserRole;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
 public class SecurityConfig {
 
     @Value("${app.cors.allowed-origins}")
@@ -33,7 +31,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         // Tokens without one of the app's roles are rejected outright; finer,
-                        // per-resource rules live in AccessPolicy / @PreAuthorize.
+                        // per-method rules live in @RequirePermission / AuthorizationService.
                         .requestMatchers("/api/**").hasAnyRole(UserRole.ADMIN.name(), UserRole.NORMAL_USER.name())
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));

@@ -12,7 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-/** Metadata of a file attached to a proposal; the bytes live in {@link com.example.esgaward.service.FileStorage}. */
+/** Metadata of a file attached to a proposal; the bytes live in {@link com.example.esgaward.storage.FileStorage}. */
 @Entity
 @Table(name = "proposal_file")
 public class ProposalFile {
