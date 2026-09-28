@@ -47,6 +47,78 @@ in [application.yml](backend/src/main/resources/application.yml)).
   the non-standard `realm_access.roles` claim, so `KeycloakRealmRoleConverter`
   maps them to Spring's `ROLE_*` authorities.
 
+- `GET|POST /api/documents`, `GET|PUT|DELETE /api/documents/{id}` — CRUD on
+  the caller's own documents (only the owner may read/update/delete one).
+- `GET /api/audit-logs?entityType=Document&entityId=<id>&actorId=<sub>` — `ADMIN`
+  only; the audit trail, newest first, with field-level changes. Filtering by
+  entity returns every operation that changed it, whichever endpoint or job did so.
+
+Data lives in an in-memory H2 database; the schema is managed by Flyway
+(`backend/src/main/resources/db/migration`).
+
+## Audit log
+
+Auditing is declarative — business code (`DocumentService`) contains no audit calls:
+
+```java
+@Audited(action = "DOCUMENT_UPDATE")
+@PutMapping("/{id}")
+public DocumentResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id, ...)
+
+@Entity
+@AuditedEntity          // field changes of this entity are recorded
+public class Document { ... @CreationTimestamp Instant createdAt; @UpdateTimestamp Instant updatedAt; }
+```
+
+The annotation deliberately doesn't declare *which* resources an endpoint touches —
+one request may change many entities, and a hand-maintained list would go stale.
+Affected resources are whatever Hibernate actually flushed (`audit_log_change`
+has one row per changed field, with `entity_type` / `entity_id`). Requests that
+changed nothing (denied / failed / reads) are identified by `path`
+(`/api/documents/3f2a…`) and `route` (`/api/documents/{id}`).
+
+How it works (`backend/src/main/java/com/example/demobackend/audit`):
+
+| Piece | Role |
+|---|---|
+| `AuditAspect` | Around every `@Audited` controller method: records actor (JWT `sub` / `preferred_username`), action, HTTP method, route pattern, path, IP, `X-Request-Id`, duration, and outcome `SUCCESS` / `DENIED` (`AccessDeniedException`) / `FAILURE`. Runs outermost, so the service transaction has already committed when it finishes. |
+| `EntityChangeListener` | Hibernate post-insert/update/delete listener for `@AuditedEntity` classes. Diffs old vs. new state per field; skips `@AuditIgnore`, `@CreationTimestamp`, `@UpdateTimestamp`, `@CreatedDate`, `@LastModifiedDate`, `@Version` fields; stores entity references by id and truncates long values. |
+| `AuditChangeRecorder` | Buffers changes per transaction and releases them only **after commit** — rolled-back changes are never logged. They're attached to the open `@Audited` call, or logged as `ENTITY_CHANGE` if none (e.g. a batch job). |
+| `AuditPublisher` | Non-blocking hand-off: `CompletableFuture.runAsync` on a bounded `ThreadPoolExecutor` (Java 17, no virtual threads). The request thread never waits for the audit DB. If the queue is full or the write fails, the event goes to the `AUDIT_FALLBACK` logger — the request is never slowed down or failed. Queued events are drained on shutdown. |
+| `AuditLogWriter` | Plain JDBC (not JPA) insert into `audit_log` + `audit_log_change` in its own transaction, so it can't trigger the entity listener or join a business transaction. |
+
+Tuning: `app.audit.worker-threads`, `queue-capacity`, `max-value-length` in
+[application.yml](backend/src/main/resources/application.yml).
+
+Not audited: requests rejected before reaching a controller (401 from the
+security filter, 400 from `@Valid`).
+
+### Trying it in a browser — http://localhost:8081/
+
+The backend serves a single dependency-free page
+([static/index.html](backend/src/main/resources/static/index.html): hand-rolled
+Authorization Code + PKCE, `fetch`) at http://localhost:8081/. It's same-origin
+with the API, so no CORS is involved; `demo-frontend` allows
+`http://localhost:8081/*` as a redirect URI for it.
+
+Log in as `demo`, create/edit/delete documents; copy a document id, log out,
+log in as `admin-demo`, try `PUT` on that id (→ 403, audited as `DENIED`), and
+watch the audit log panel with field diffs.
+
+### Reminding developers — `AuditArchitectureTest` (ArchUnit)
+
+`./mvnw test` fails when:
+
+- a `POST`/`PUT`/`PATCH`/`DELETE` endpoint has no `@Audited`;
+- any other endpoint has neither `@Audited` nor `@NoAudit(reason = "...")`, or the reason is blank;
+- an `@Entity` has neither `@AuditedEntity` nor `@NoAudit`;
+- a `createdAt`/`updatedAt`-style field of an audited entity isn't marked as a timestamp / `@AuditIgnore`;
+- `@Audited` is used outside a `@RestController`;
+- code outside the `audit` package depends on anything but `audit.annotation` (i.e. calls audit internals directly).
+
+`AuditArchitectureFixtureTest` runs the rules against deliberately broken
+classes (`com.example.auditfixture`) to prove they actually fail.
+
 ## 3. Start the frontend
 
 ```

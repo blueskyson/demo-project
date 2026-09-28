@@ -9,10 +9,22 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8080/realms/demo-realm
+  datasource:
+    url: jdbc:h2:mem:demodb;DB_CLOSE_DELAY=-1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
 
 app:
   cors:
     allowed-origins: http://localhost:5173
+  audit:
+    # Audit events are written off the request thread by a small bounded pool.
+    # When the queue is full, events are dropped (and logged) instead of slowing requests down.
+    worker-threads: 2
+    queue-capacity: 10000
+    max-value-length: 2000
 
 logging:
   level:
