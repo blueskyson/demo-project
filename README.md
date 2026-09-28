@@ -1,33 +1,68 @@
-# demo-project
+# ESG Award (training project)
 
-A minimal, standards-based OAuth2/OIDC stack: Keycloak (Docker) as the identity
-provider, a Spring Boot 4.1.1 OAuth2 Resource Server API, and a Vite + React +
-TypeScript + Mantine SPA using the Authorization Code + PKCE flow.
+ESG Award submission system used for new-hire training. Keycloak (Docker) is the
+identity provider, a Spring Boot 4.1.1 / **Java 17** OAuth2 Resource Server
+(PostgreSQL + Flyway) serves the API, and a Vite + React + TypeScript + Mantine
+SPA signs in with Authorization Code + PKCE.
 
 ```
-keycloak/     realm-export.json — auto-imported realm/client/users
-backend/      Spring Boot 4.1.1 resource server (Maven)
+keycloak/     realm-export.json — auto-imported realm/client/roles/users
+backend/      Spring Boot 4.1.1 resource server (Maven, Java 17)
 frontend/     Vite + React + TypeScript + Mantine SPA
 ```
 
-## 1. Start Keycloak
+## Domain
+
+| Entity            | Table             | Notes                                                                 |
+|-------------------|-------------------|-----------------------------------------------------------------------|
+| `User`            | `users`           | Local copy of a Keycloak user (id = token `sub`), created on first API call |
+| `AwardEvent`      | `award_event`     | Has a `deadline`; the event is *closed* from that instant on         |
+| `Proposal`        | `proposal`        | Belongs to one award event, has one `leader` (a user)                 |
+| `ProposalMember`  | `proposal_member` | Join entity: proposal ⟷ user many-to-many                             |
+| `ProposalFile`    | `proposal_file`   | Metadata of an uploaded file; bytes are stored under `app.storage.dir` |
+
+The schema lives in [V1__init.sql](backend/src/main/resources/db/migration/V1__init.sql);
+Hibernate runs with `ddl-auto: validate`, so schema changes go through a new
+Flyway migration.
+
+## Roles and permissions
+
+Two Keycloak realm roles, mapped to Spring authorities by
+[KeycloakRealmRoleConverter](backend/src/main/java/com/example/esgaward/config/KeycloakRealmRoleConverter.java):
+`admin` → `ROLE_ADMIN`, `normal_user` → `ROLE_NORMAL_USER`. Tokens with
+neither role get 403 on every `/api/**` endpoint.
+
+| Action                                          | `admin` | `normal_user`                                              |
+|-------------------------------------------------|---------|------------------------------------------------------------|
+| View award events                               | ✅      | ✅                                                         |
+| Create / edit / delete award events             | ✅      | ❌                                                         |
+| Create a proposal                               | ✅      | ✅ if the award event is still open (they become the leader) |
+| View a proposal and download its files          | ✅      | ✅ if they are its leader or a member                      |
+| Edit / delete a proposal, manage members & files | ✅      | ✅ only if they are its **leader** and the award event is **still open** |
+| Change a proposal's leader                      | ✅      | ❌                                                         |
+
+Role-only rules use `@PreAuthorize`; the per-resource rules all live in
+[AccessPolicy](backend/src/main/java/com/example/esgaward/security/AccessPolicy.java).
+API responses include an `editable` flag computed by the same policy, which the
+UI uses to show or hide edit controls.
+
+## 1. Start Keycloak and PostgreSQL
 
 ```
 docker compose up -d
 ```
 
-Waits until healthy, then serves the identity provider at http://localhost:8080.
+- Keycloak: http://localhost:8080 — admin console http://localhost:8080/admin (`admin` / `admin`)
+  - Realm `esg-award`, SPA client `esg-award-frontend` (public, PKCE-S256, no secret)
+  - Seeded users:
+    - `esg-admin` / `admin123` — role `admin`
+    - `alice` / `alice123` — role `normal_user`
+    - `bob` / `bob123` — role `normal_user`
+- PostgreSQL: `localhost:5432`, database `esg_award`, user/password `esg` / `esg`
 
-- Admin console: http://localhost:8080/admin (`admin` / `admin`)
-- Realm: `demo-realm`
-- SPA client: `demo-frontend` (public, PKCE-S256 required, no client secret)
-- Seeded users:
-  - `demo` / `demo123` — role `USER`
-  - `admin-demo` / `admin123` — roles `USER`, `ADMIN`
-
-Realm/client/users are defined declaratively in [keycloak/realm-export.json](keycloak/realm-export.json)
-and imported automatically on first boot — no manual setup in the admin console
-is required. To reset to a clean state: `docker compose down -v`.
+Realm, client, roles, and users are defined in [keycloak/realm-export.json](keycloak/realm-export.json)
+and imported on first boot. To reset everything (Keycloak and the database):
+`docker compose down -v`.
 
 ## 2. Start the backend
 
@@ -36,16 +71,30 @@ cd backend
 ./mvnw spring-boot:run
 ```
 
-Runs on http://localhost:8081 as a pure OAuth2 Resource Server — it has no
-Keycloak client of its own, it just validates access tokens against
-`demo-realm`'s issuer/JWKS (`spring.security.oauth2.resourceserver.jwt.issuer-uri`
-in [application.yml](backend/src/main/resources/application.yml)).
+Requires JDK 17+. Runs on http://localhost:8081; Flyway migrates the database on
+startup. Uploaded files go to `backend/data/uploads` (`app.storage.dir`).
 
-- `GET /api/public/hello` — no auth required.
-- `GET /api/private/me` — requires a valid Bearer access token; returns the
-  username/email/roles read out of the JWT. Keycloak's realm roles live under
-  the non-standard `realm_access.roles` claim, so `KeycloakRealmRoleConverter`
-  maps them to Spring's `ROLE_*` authorities.
+`./mvnw test` runs against an in-memory H2 database (profile `test`), so it
+needs neither Docker nor Keycloak.
+
+### API
+
+| Method & path                                      | Description                                  |
+|----------------------------------------------------|----------------------------------------------|
+| `GET /api/users/me`                                | Current user (created/synced from the token) |
+| `GET /api/users`                                   | Users who have signed in at least once       |
+| `GET/POST /api/award-events`                       | List / create (admin) award events           |
+| `GET/PUT/DELETE /api/award-events/{id}`            | Get / update (admin) / delete (admin)        |
+| `GET /api/proposals?awardEventId=`                 | Proposals visible to the current user        |
+| `POST /api/proposals`                              | Create a proposal                            |
+| `GET/PUT/DELETE /api/proposals/{id}`               | Get / update / delete a proposal             |
+| `POST /api/proposals/{id}/members`                 | Add a member (`{"userId": "..."}`)           |
+| `DELETE /api/proposals/{id}/members/{userId}`      | Remove a member                              |
+| `POST /api/proposals/{id}/files`                   | Upload a file (multipart field `file`, ≤ 20 MB) |
+| `GET /api/proposals/{id}/files/{fileId}/content`   | Download a file                              |
+| `DELETE /api/proposals/{id}/files/{fileId}`        | Delete a file                                |
+
+Errors are returned as RFC 9457 problem details (`{"status":403,"detail":"The award event deadline has passed",...}`).
 
 ## 3. Start the frontend
 
@@ -67,19 +116,15 @@ URL) lives in [frontend/.env](frontend/.env).
 - **Calling the API**: the SPA attaches the OIDC access token as
   `Authorization: Bearer <token>` on requests to the backend.
 - **Refresh**: `automaticSilentRenew: true` — when the access token is close
-  to expiry, `oidc-client-ts` transparently uses the refresh token (issued
-  alongside the access token on login) to get a new one via the standard
-  `grant_type=refresh_token` request, no iframe/redirect needed.
-- **Logout**: `auth.signoutRedirect()` performs RP-Initiated Logout — it hits
-  Keycloak's `end_session_endpoint` with the ID token, ending the Keycloak SSO
-  session, then redirects back to the SPA.
+  to expiry, `oidc-client-ts` uses the refresh token to get a new one.
+- **Logout**: `auth.signoutRedirect()` performs RP-Initiated Logout against
+  Keycloak's `end_session_endpoint`, then redirects back to the SPA.
 
 ## Notes
 
-- `demo-frontend` has `directAccessGrantsEnabled: false` — the SPA must use
-  the browser redirect flow, not the resource-owner password grant. This was
-  verified during development by temporarily toggling it on via the Admin API
-  to fetch a test token, then reverting it back to match `realm-export.json`.
-- This is a local dev setup: Keycloak runs in dev mode (`start-dev`, no TLS,
-  ephemeral H2 storage), and CORS on the backend is scoped to
-  `http://localhost:5173`. Do not deploy this configuration as-is.
+- A user only appears in `GET /api/users` (and can be added as a member)
+  after they have signed in once, because the local `users` row is created
+  from their token.
+- This is a local dev setup: Keycloak runs in dev mode (`start-dev`, no TLS),
+  and CORS on the backend is scoped to `http://localhost:5173`. Do not deploy
+  this configuration as-is.

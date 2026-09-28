@@ -1,5 +1,6 @@
 {
-  "realm": "demo-realm",
+  "realm": "esg-award",
+  "displayName": "ESG Award",
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
@@ -9,14 +10,20 @@
   "ssoSessionMaxLifespan": 36000,
   "roles": {
     "realm": [
-      { "name": "USER", "description": "Standard application user" },
-      { "name": "ADMIN", "description": "Administrative user" }
+      {
+        "name": "admin",
+        "description": "Can manage every award event, proposal, member and file"
+      },
+      {
+        "name": "normal_user",
+        "description": "Can edit proposals they lead while the award event is open"
+      }
     ]
   },
   "clients": [
     {
-      "clientId": "demo-frontend",
-      "name": "Demo Frontend (SPA)",
+      "clientId": "esg-award-frontend",
+      "name": "ESG Award Frontend (SPA)",
       "enabled": true,
       "publicClient": true,
       "protocol": "openid-connect",
@@ -38,28 +45,64 @@
   ],
   "users": [
     {
-      "username": "demo",
+      "username": "esg-admin",
       "enabled": true,
       "emailVerified": true,
-      "firstName": "Demo",
-      "lastName": "User",
-      "email": "demo@example.com",
+      "firstName": "ESG",
+      "lastName": "Admin",
+      "email": "esg-admin@example.com",
       "credentials": [
-        { "type": "password", "value": "demo123", "temporary": false }
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["USER", "offline_access", "uma_authorization"]
+      "realmRoles": [
+        "admin",
+        "offline_access",
+        "uma_authorization"
+      ]
     },
     {
-      "username": "admin-demo",
+      "username": "alice",
       "enabled": true,
       "emailVerified": true,
-      "firstName": "Admin",
-      "lastName": "Demo",
-      "email": "admin-demo@example.com",
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "email": "alice@example.com",
       "credentials": [
-        { "type": "password", "value": "admin123", "temporary": false }
+        {
+          "type": "password",
+          "value": "alice123",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["USER", "ADMIN", "offline_access", "uma_authorization"]
+      "realmRoles": [
+        "normal_user",
+        "offline_access",
+        "uma_authorization"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Wang",
+      "email": "bob@example.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "normal_user",
+        "offline_access",
+        "uma_authorization"
+      ]
     }
   ]
 }

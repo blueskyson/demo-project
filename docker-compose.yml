@@ -1,7 +1,7 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.7
-    container_name: demo-keycloak
+    container_name: esg-keycloak
     command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -19,5 +19,23 @@ services:
       retries: 15
       start_period: 30s
 
+  postgres:
+    image: postgres:17
+    container_name: esg-postgres
+    environment:
+      POSTGRES_DB: esg_award
+      POSTGRES_USER: esg
+      POSTGRES_PASSWORD: esg
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esg -d esg_award"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   keycloak-data:
+  postgres-data:
