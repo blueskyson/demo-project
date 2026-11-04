@@ -1,0 +1,16 @@
+services:
+  db2:
+    image: icr.io/db2_community/db2:latest
+    container_name: db2lab
+    hostname: db2lab
+    privileged: true            # DB2 需要調整 kernel 參數 (IPC)，官方映像要求 privileged
+    env_file: .env
+    ports:
+      - "50000:50000"           # DB2 TCP/IP 連線埠 (SVCENAME)
+    volumes:
+      - db2data:/database       # instance home、資料庫、log、備份都放在這裡
+      - ./labs:/labs            # 各 lab 的 SQL 腳本，容器內可直接執行
+    shm_size: 1g
+
+volumes:
+  db2data:
