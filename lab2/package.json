@@ -1,0 +1,20 @@
+{
+  "name": "weather-mcp",
+  "version": "1.0.0",
+  "description": "Weather MCP server (Open-Meteo)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "inspect": "npx @modelcontextprotocol/inspector node server.js",
+    "test": "node test-client.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "type": "module",
+  "bin": {
+    "weather-mcp": "server.js"
+  }
+}

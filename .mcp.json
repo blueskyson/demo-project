@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "weather": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "lab2/server.js"
+      ],
+      "env": {}
+    }
+  }
+}
