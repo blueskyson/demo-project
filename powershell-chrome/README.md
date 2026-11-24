@@ -3,7 +3,8 @@
 Drives [PromQL Playground](https://promql-playground.vercel.app/) headfully
 through the **Chrome DevTools Protocol (CDP)** over a raw WebSocket — no
 Selenium/Playwright/puppeteer involved, just `System.Net.WebSockets.ClientWebSocket`
-from PowerShell.
+from PowerShell. Works against either **Edge** (default) or **Chrome** — both
+are Chromium-based and speak the same CDP.
 
 Given a PromQL query, it:
 
@@ -34,6 +35,12 @@ Custom query / output path:
 .\Run-PromQLQuery.ps1 -Query 'sum(rate(demo_api_request_duration_seconds_count[5m])) by (path)' -OutFile .\out.json
 ```
 
+Use Chrome instead of Edge:
+
+```powershell
+.\Run-PromQLQuery.ps1 -Browser Chrome
+```
+
 ### Parameters
 
 | Parameter         | Default                                      | Description |
@@ -42,8 +49,9 @@ Custom query / output path:
 | `-Query`          | `rate(demo_api_request_duration_seconds_count{status=~"5.."}[5m])` | PromQL query to run |
 | `-OutFile`        | `.\query_response.json`                       | Where to save the captured response body |
 | `-UrlMatch`       | auto (longest identifier token in `-Query`)   | Substring used to pick out the right network request |
-| `-DebugPort`      | `9222`                                        | Chrome `--remote-debugging-port` |
-| `-ChromePath`     | auto-detected                                 | Path to `chrome.exe` |
+| `-Browser`        | `Edge`                                        | `Edge` or `Chrome` |
+| `-DebugPort`      | `9222`                                        | `--remote-debugging-port` |
+| `-BrowserPath`    | auto-detected                                 | Path to `msedge.exe` / `chrome.exe` |
 | `-TimeoutSeconds` | `15`                                          | How long to wait for the network response after clicking Run |
 
 ## Output
@@ -90,8 +98,21 @@ A Prometheus `query_range`-shaped JSON document:
   and a Monaco editor exposed on `window.monaco`. If the site changes its
   editor library or button label, the injection/click steps will need
   updating.
-- Launches a **new** Chrome instance with a throwaway profile in
-  `%TEMP%\cdp-profile-<port>` each run (not closed automatically afterward).
+- Launches a **new** browser instance with a throwaway profile in
+  `%TEMP%\cdp-profile-<Browser>-<port>` each run (not closed automatically
+  afterward).
+- The script waits (up to 20s) for `window.monaco` to appear before touching
+  the editor, since the CDP page target shows up as soon as navigation
+  starts — well before the app has actually mounted. If the page is
+  unusually slow to load, bump `-TimeoutSeconds` / edit the 20s wait in the
+  script.
 - `-UrlMatch` auto-detection assumes the query contains a reasonably unique
   identifier (e.g. a metric name); pass `-UrlMatch` explicitly for very short
   or generic queries (e.g. `up`).
+- Requires the browser's remote-debugging backend to actually be enabled.
+  Enterprise policy (`DeveloperToolsAvailability` and its Edge/Chrome ADMX
+  equivalents) can disable this entirely per-browser — this script will fail
+  outright (connection refused / `Wait-ForPageTarget` timeout) if the chosen
+  `-Browser` has that policy applied. Different browsers on the same machine
+  can be configured differently by IT, so if one is locked down, try the
+  other via `-Browser`.
